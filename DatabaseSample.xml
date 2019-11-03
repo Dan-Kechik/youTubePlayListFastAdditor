@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<database>
+   <destination>
+      <playlist="" account="" password=""/>
+   </destination>
+   <channels>
+      <channel link=""/>
+   </channels>
+   <lists>
+      <list link=""/>
+   </lists>
+   <commonList>
+   </commonList>
+</database>
