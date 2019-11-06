@@ -62,41 +62,44 @@ def get_video_list(channelLink):
         return {}
 
 
-# Create new document.
-impl = MD.getDOMImplementation()
-docNode = impl.createDocument(None, 'database', None)
-docRootNode = docNode.documentElement
 # Read old data.
 pathToDB = os.path.normpath(os.getcwd() + os.sep + 'Database.xml')
-databaseXml = MD.parse(pathToDB)
-# Update the common data.
-channelsList = databaseXml.getElementsByTagName('channels')[0]
-listsList = databaseXml.getElementsByTagName('lists')[0]
-docRootNode.appendChild(channelsList)
-docRootNode.appendChild(listsList)
+try:
+    databaseFile = etree.parse(pathToDB)
+except:
+    pathToDBSample = os.path.normpath(os.getcwd() + os.sep + 'DatabaseSample.xml')
+    databaseFile = etree.parse(pathToDB)
+databaseXml = databaseFile.getroot()
+# Get the common data.
+channels = databaseXml.xpath('//channels/channel/@link')
+playlists = databaseXml.xpath('//lists/list/@link')
 
 playlists.extend(channels)
 videos = []
 for ai in range(0, len(playlists), 1):
-    videos.extend(get_video_list(playlists[ai]))
-    # Check existing videos
-    # Start from the bottom of new videos list, break when the first new video has reached.
-    # Start from the top of existing videos list, break when videos IDs are matched; del video from addition list.
-    # Append new videos to the full list.
+    currSource = str(playlists[ai])
+    videos.extend(get_video_list(currSource))
+
+# ..Check existing videos..
+# Get an previously saved videos ID strings.
+oldVideos = databaseXml.xpath('//commonList/video/@videoId')
+for ai in range(0, len(oldVideos), 1):
+    oldVideos[ai] = str(oldVideos[ai])
+# Find each new video ID in an old videos IDs list.
+foundVideos = []
+for ai in range(0, len(videos), 1):
+    if not videos[ai].get('videoId') in oldVideos:
+        foundVideos.append(videos[ai])
 
 # Sort by dates.
-videos.sort(key=dateComparison, reverse=True)
-commonList = docNode.createElement('commonList')
-docRootNode.appendChild(commonList)
+foundVideos.sort(key=dateComparison, reverse=True)
 
 # Write full list to database.
-for viDict in videos:
-    videoElement = docNode.createElement('video')
-    # Write to video tags.
+videoList = databaseXml.xpath('//commonList')[0]
+for viDict in foundVideos:
+    videoElement = etree.Element('video')  # New video tag.
+    videoList.append(videoElement)
     for keyz in viDict.keys():
-        videoElement.setAttribute(keyz, viDict.get(keyz).encode('ascii','replace').decode())
-    commonList.appendChild(videoElement)
+        videoElement.set(keyz, viDict.get(keyz).encode('utf-8').decode())  # .encode('ascii','replace').decode()
 
-with open(pathToDB, 'w') as f:
-    docNode.writexml(f, encoding="utf-8", addindent="   ", newl="\n")
-print(videos)
+databaseFile.write(pathToDB, encoding='utf-8', xml_declaration=True)
