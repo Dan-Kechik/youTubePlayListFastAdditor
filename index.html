@@ -1,0 +1,35 @@
+<!DOCTYPE HTML>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+</head>
+<body>
+<h1>Загрузка видео в плейлист</h1>
+<script><!--
+    var socket = new WebSocket("ws://localhost:9090");
+	socket.onopen = function() {
+	console.log("Соединение установлено.");
+	};
+
+	socket.onclose = function(event) {
+	  if (event.wasClean) {
+		console.log('Соединение закрыто чисто');
+	  } else {
+		console.log('Обрыв соединения'); // например, "убит" процесс сервера
+	  }
+	  console.log('Код: ' + event.code + ' причина: ' + event.reason);
+	};
+
+	socket.onmessage = function(event) {
+	  //alert("Получены данные " + event.data);
+	  console.log("Sended " + event.data);
+	};
+	
+	console.log("Grzegorz")
+	socket.send("Grzegorz Brzeczyszczykiewicz")
+	console.log("Brzeczyszczykiewicz")
+	socket.send("bye")
+	console.log("Send close request")
+	
+//--></script>
+</body>
+</html>
