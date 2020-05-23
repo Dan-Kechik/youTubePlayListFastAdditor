@@ -5,9 +5,15 @@
 <body>
 <h1>Загрузка видео в плейлист</h1>
 <script><!--
-    var socket = new WebSocket("ws://localhost:9090");
+    var socket = new WebSocket("ws://echo.websocket.org");
 	socket.onopen = function() {
 	console.log("Соединение установлено.");
+	
+	console.log("Grzegorz")
+	socket.send("Grzegorz Brzeczyszczykiewicz")
+	console.log("Brzeczyszczykiewicz")
+	socket.send("bye")
+	console.log("Send close request")
 	};
 
 	socket.onclose = function(event) {
@@ -24,11 +30,7 @@
 	  console.log("Sended " + event.data);
 	};
 	
-	console.log("Grzegorz")
-	socket.send("Grzegorz Brzeczyszczykiewicz")
-	console.log("Brzeczyszczykiewicz")
-	socket.send("bye")
-	console.log("Send close request")
+
 	
 //--></script>
 </body>

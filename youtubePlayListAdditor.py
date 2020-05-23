@@ -18,7 +18,9 @@ def getAPIkey():
 
 
 def dateComparison(dateElement):
-    return datetime.strptime(dateElement.get('publishedAt')[:-5], '%Y-%m-%dT%H:%M:%S')
+    date = dateElement.get('publishedAt').split('.')
+    date = date[0].split('Z')
+    return datetime.strptime(date[0], '%Y-%m-%dT%H:%M:%S')
 
 
 def get_video_list(channelLink):
@@ -124,6 +126,11 @@ def sendDataBase(databaseXml):
         print('listen')
         conn, addr = sock.accept()
         print('connected:', addr)
+        while True:
+            data = conn.recv(100)
+            if not data:
+                break
+            print(data)
     except ConnectionRefusedError:
         ready2send = False
     # Collect database to HTML tags.
