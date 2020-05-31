@@ -5,10 +5,13 @@
 <body>
 <h1>Загрузка видео в плейлист</h1>
 <script><!--
-    var socket = new WebSocket("ws://echo.websocket.org");
+    var socket = new WebSocket("ws://localhost:8888"); //"ws://echo.websocket.org" //"ws://localhost:8888"
 	socket.onopen = function() {
 	console.log("Соединение установлено.");
 	
+	setTimeout(function() {
+    console.log("Grzegorz");
+	}, (3 * 1000));
 	console.log("Grzegorz")
 	socket.send("Grzegorz Brzeczyszczykiewicz")
 	console.log("Brzeczyszczykiewicz")
@@ -27,7 +30,7 @@
 
 	socket.onmessage = function(event) {
 	  //alert("Получены данные " + event.data);
-	  console.log("Sended " + event.data);
+	  console.log("Recieved " + event.data);
 	};
 	
 

@@ -2,12 +2,27 @@ import time
 from socket import (socket, AF_INET, SOCK_STREAM, SO_REUSEADDR, SOL_SOCKET)
 from convenientServer import echoServer
 
+class myServer(echoServer):
+
+    def runCallBack(self):
+        t = self.serverLoop.time()
+        str = f'Loop time is {t}'
+        print(str)
+        self.push('toServer', str)
+        time.sleep(3)
+        print(self.serverLoop.time())
+        self.serverLoop.call_later(5, self.runCallBack)
+
+
 if __name__ == "__main__":
-    myServ = echoServer()
+    myServ = myServer()
+    myServ.start()
+    #myServ.serverLoop.call_later(5, myServ.runCallBack())
     print('Linear code line has been executed.')
     time.sleep(7)
-    print('One more line of linear code has been executed.')
-    time.sleep(15)
+    while 1:
+        #print('One more line of linear code has been executed.')
+        time.sleep(15)
     print('The last line of linear code has been executed.')
     time.sleep(15)
     print('Trying to stop...')
