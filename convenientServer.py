@@ -6,6 +6,7 @@ import asyncio
 import threading
 from queue import Queue
 from collections import OrderedDict
+import websockets
 
 
 class echoServer:
@@ -31,8 +32,7 @@ class echoServer:
 
     def start(self):
         self.stop_all()
-        self.serverLoop = asyncio.get_event_loop()
-        self.serverLoop.create_task(self.start_forever())
+        self.start_forever()
         self.socket_thread = threading.Thread(target=self.loopServer, args=(), name=self.arguments['taskName'], daemon=True)
         self.socket_thread.start()
 
@@ -41,7 +41,6 @@ class echoServer:
 
     def push_and_wait(self, q, value):
         self.push(q, value)
-        self.push(q, 'wait')
         self.queue[q].join()
 
     def pop(self, q, defVal=None):
@@ -51,70 +50,57 @@ class echoServer:
             message = defVal
         return message
 
-    async def processRequests(self, reader, writer):
+    async def processRequests(self, websocket, path):
+        while True:
+            try:
+                # Wait for request from client.
+                data = await websocket.recv()
+                print(f"Received {data!r} from {path!r}")
 
-        # Wait for request from client.
-        data = await reader.read(100)
-        message = data.decode()
-        addr = writer.get_extra_info('peername')
-        print(f"Received {message!r} from {addr!r}")
+                # Push it to queue and wait for its execution.
+                self.push_and_wait('fromClient', data)
+                print('Awaited backend operations.')
 
-        # Push it to queue and wait for its execution.
-        self.push_and_wait('fromClient', data)
-        # Read arguments for sending and push forward.
+                # Read arguments for sending and push forward.
+                message = self.pop('toClient')
+                await websocket.send(message)
+                print(f'Sended to client: {message}')
 
-        message = self.pop('toClient')
-        if not type(message) is bytes:
-            writer.write(message.encode())
-        else:
-            writer.write(message)
-        print(f"Send: {message!r}")
-        await writer.drain()
+            except websockets.ConnectionClosed:
+                print(f"Terminated")
+                self.start()
 
-    async def handle_echo(self, reader, writer):
-        data = await reader.read(1024)
-        message = data.decode()
-        addr = writer.get_extra_info('peername')
+    async def handle_echo(self, websocket, path):
+        name = await websocket.recv()
+        print(f"< {name}")
 
-        print(f"Received {message!r} from {addr!r}")
+        greeting = f"Hello {name}!"
 
-        sockKey = re.findall(r'Sec-WebSocket-Key: .{24}', message)
-        if message.find('GET') > -1 and len(sockKey) > 0:
-            sockKey = sockKey[0][19:]
-            SK = sockKey + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11'
-            hash_object = hashlib.sha1(SK.encode())
-            dj = hash_object.digest()
-            myKey = base64.b64encode(dj).decode('UTF-8')
-            #message = 'HTTP/1.1 200 OK\n' + 'Content-Type: text/html\n' + 'Connection: keep-alive\n' + '\n'
-                            # 'Connection: keep-alive\n',  # keep-alive, close
-                               # header and body should be separated by additional newline
-            message = ("HTTP/1.1 101 Web Socket Handshake\n"+'Access-Control-Allow-Credentials: true\n'+
-                       'Access-Control-Allow-Headers: content-type\n' + 'Access-Control-Allow-Headers: authorization\n'+
-                       'Access-Control-Allow-Headers: x-websocket-extensions\n' + 'Access-Control-Allow-Headers: x-websocket-version\n'+
-                       'Access-Control-Allow-Headers: x-websocket-protocol\n' + 'Access-Control-Allow-Origin: null\n'+
-                       "Connection: Upgrade\n"+'Date: Sat, 30 May 2020 18:57:27 GMT\n'
-                       "Sec-WebSocket-Accept: "+myKey+"\n"+
-                       "Upgrade: websocket\n"+"\n")
-            # Sec-WebSocket-Protocol: websocket\n
-            print('Switching protocols:\n'+message)
-        else:
-            message = self.pop('toServer', message)
-            #message = 'resp'
-            #message = ('HTTP/1.1 200 OK\n'+'Content-Type: text/html\n'+'Content-Length: {}'.format(len(message))+'\nConnection: keep-alive\n'+'\n'+message)
-        writer.write(message.encode())
-        print(f"Send: {message!r}")
+        await websocket.send(greeting)
+        print(f"> {greeting}")
 
-        await writer.drain()
-
-    async def start_forever(self):
+    def start_forever(self):
         name = self.arguments['taskName']
-        self.server = await asyncio.start_server(self.tasks[name], self.address[0], self.address[1])
 
-        addr = self.server.sockets[0].getsockname()
-        print(f'Serving on {addr}')
+        #myURL = r'ws://' + self.address[0] + f':{self.address[1]}'
+        #async with websockets.connect(myURL) as myServ:
+        #    self.server = myServ
+        #    await self.consume_handler()
+        start_server = websockets.serve(self.tasks[name], self.address[0], self.address[1])
+        self.serverLoop = asyncio.get_event_loop()
+        self.serverLoop.run_until_complete(start_server)
+        #await start_server.ws_server()
+        #await start_server()
+        #asyncio.get_event_loop().run_until_complete(start_server)
+        #asyncio.get_event_loop().run_forever()
 
-        async with self.server:
-            await self.server.serve_forever()
+        #self.server = await asyncio.start_server(self.tasks[name], self.address[0], self.address[1])
+
+        #addr = self.server.sockets[0].getsockname()
+        #print(f'Serving on {addr}')
+
+        #async with self.server:
+            #await self.server.serve_forever()
 
 
     def loopServer(self):

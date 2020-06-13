@@ -20,9 +20,8 @@ if __name__ == "__main__":
     #myServ.serverLoop.call_later(5, myServ.runCallBack())
     print('Linear code line has been executed.')
     time.sleep(7)
-    while 1:
-        #print('One more line of linear code has been executed.')
-        time.sleep(15)
+    print('One more line of linear code has been executed.')
+    time.sleep(15)
     print('The last line of linear code has been executed.')
     time.sleep(15)
     print('Trying to stop...')

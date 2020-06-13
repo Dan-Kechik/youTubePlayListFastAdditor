@@ -1,40 +1,85 @@
 <!DOCTYPE HTML>
+
+<html lang="ru" xmlns="http://www.w3.org/1999/xhtml">
 <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 </head>
 <body>
 <h1>Загрузка видео в плейлист</h1>
-<script><!--
-    var socket = new WebSocket("ws://localhost:8888"); //"ws://echo.websocket.org" //"ws://localhost:8888"
-	socket.onopen = function() {
-	console.log("Соединение установлено.");
-	
-	setTimeout(function() {
-    console.log("Grzegorz");
-	}, (3 * 1000));
-	console.log("Grzegorz")
-	socket.send("Grzegorz Brzeczyszczykiewicz")
-	console.log("Brzeczyszczykiewicz")
-	socket.send("bye")
-	console.log("Send close request")
-	};
+<script src="./lib/reconnecting-websocket/reconnecting-websocket.js"></script>
+<div id = "mainTable">
 
-	socket.onclose = function(event) {
-	  if (event.wasClean) {
-		console.log('Соединение закрыто чисто');
-	  } else {
-		console.log('Обрыв соединения'); // например, "убит" процесс сервера
-	  }
-	  console.log('Код: ' + event.code + ' причина: ' + event.reason);
-	};
+</div>
 
-	socket.onmessage = function(event) {
-	  //alert("Получены данные " + event.data);
-	  console.log("Recieved " + event.data);
-	};
-	
+<script>
+var socket = new ReconnectingWebSocket("ws://127.0.0.1:8888"); //"ws://echo.websocket.org" //"ws://localhost:8888"<script src="./reconnecting-websocket/reconnecting-websocket.js" type="module">
+socket.onopen = function() {
+console.log("Соединение установлено.");
+str = JSON.stringify({name:"Grzegorz", surname:"Brzeczyszczykiewicz"});
+socket.send(str);
+console.log("Sended handshake");
+};
 
-	
-//--></script>
+socket.onclose = function(event) {
+  if (event.wasClean) {
+	console.log('Соединение закрыто чисто');
+  } else {
+	console.log('Обрыв соединения'); // например, "убит" процесс сервера
+  }
+  console.log('Код: ' + event.code + ' причина: ' + event.reason);
+};
+
+socket.onmessage = function(event) {
+  console.log("Recieved " + event.data);
+  //Get HTML elements of future table.
+  var htmlContent = htmlToElements(event.data);
+  //Get target block.
+  var tableBlock = document.getElementById("mainTable");
+  //Clear target block.
+  deleteList(tableBlock)
+  //Fill in table.
+  appentList(htmlContent, tableBlock);
+};
+
+/**
+ * @param {String} HTML representing any number of sibling elements
+ * @return {NodeList} 
+ * Thanks to https://stackoverflow.com/a/35385518/11846322
+ */
+function htmlToElements(html) {
+	var template = document.createElement('template');
+	template.innerHTML = html;
+	return template.content.childNodes;
+};
+
+function appentList(myNodList, targetNode) {
+	var ai;
+	for (ai = 0; ai < myNodList.length; ai++) {
+	  targetNode.appendChild(myNodList[ai]);
+	}
+};
+
+function deleteList(targetNode) {
+	while (targetNode.hasChildNodes()) {
+      targetNode.removeChild(targetNode.firstChild);
+   }
+};
+
+function sendAnswer(lastViewed){
+	var selectedString = '';
+	var ai = 0;
+	do { // Collect all selected checkboxes and send indexes of videos for adding.
+		myCheckBox = document.getElementById(String(ai));
+		if ((myCheckBox != null) && (myCheckBox.checked)){
+			selectedString = selectedString + ',' + ai;
+		}
+		ai++;
+	} while (myCheckBox != null);
+	message = JSON.stringify({name:"Grzegorz", signedCheckNumber: selectedString, viewedButtonNum: lastViewed});
+	console.log('Answer: \n' + message);
+	socket.send(message);
+};
+
+</script>
 </body>
 </html>

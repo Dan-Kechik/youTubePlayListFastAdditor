@@ -1,2 +1,6 @@
 Database.xml
 APIkey.txt
+client-oauth2.json
+client_secret_apps.googleusercontent.com.json
+__pycache__/*
+.idea/*
