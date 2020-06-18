@@ -7,11 +7,49 @@ from lxml import etree
 from datetime import datetime
 import os
 import traceback
-import time
 from convenientServer import echoServer
 import copy
 import warnings
+import google_auth_oauthlib.flow
+import googleapiclient.discovery
+import googleapiclient.errors
 
+scopes = ["https://www.googleapis.com/auth/youtube.force-ssl"]
+api_service_name = "youtube"
+api_version = "v3"
+CLIENT_SECRETS_FILE = "client_secret_apps.googleusercontent.com.json"  # OAuth data.
+deployOAuthServ = True  # Server or console authentification
+MAX_ELEMENTS_ON_PAGE = 150
+
+def runAuth():
+    # Get credentials and create an API client
+    flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file(
+        CLIENT_SECRETS_FILE, scopes)
+    if deployOAuthServ:
+        credentials = flow.run_local_server()
+    else:
+        credentials = flow.run_console()
+    youtube = googleapiclient.discovery.build(
+        api_service_name, api_version, credentials=credentials)
+    return youtube
+
+def sendVideo(youtube, playListID, videoID, position=0):
+    request = youtube.playlistItems().insert(
+        part="snippet",
+        body={
+            "snippet": {
+                "playlistId": playListID,
+                # "position": position,
+                "resourceId": {
+                    "kind": "youtube#video",
+                    "videoId": videoID
+                }
+            }
+        }
+    )
+    response = request.execute()
+    print(response)
+    return response
 
 def getAPIkey():
     with open('APIkey.txt', "rt") as f:
@@ -46,6 +84,11 @@ def get_video_list(channelLink):
         video_list =[]
         keys = 'videoId', 'title', 'publishedAt', 'channelTitle', 'description', 'preview'
 
+        if not data.get('error') is None:
+            warnings.warn("Error of data retrieving from youtube.", UserWarning)
+            print(data)
+            return []
+
         for item in data.get('items'):
             try:
                 videoId = item.get('id').get('videoId')
@@ -71,7 +114,7 @@ def get_video_list(channelLink):
         return video_list
     except Exception as e:
         print(traceback.format_exc())
-        return {}
+        return []
 
 
 def updateDB(delIndex=None):
@@ -125,6 +168,9 @@ def updateDB(delIndex=None):
 def sendSelected(signedCheckNumber, databaseXmlFull):
     signedCheckNumber = signedCheckNumber.strip(',').split(',')  # Get numbers of selected for sending videos.
     videoList = databaseXmlFull.xpath('//commonList')[0]
+    playListID = databaseXmlFull.xpath('//playListID')[0]
+    playListID = playListID.get('value')
+    youtube = runAuth()
     for ai in range(0, len(signedCheckNumber)):
         if signedCheckNumber[ai] == '':
             continue
@@ -133,16 +179,18 @@ def sendSelected(signedCheckNumber, databaseXmlFull):
         print(videoId)
         title = videoList[currentIndex].get('title')
         print(title)
+        sendVideo(youtube, playListID, videoId)
 
 def prepareDataBase(databaseXml):
     # Collect database to HTML tags.
     videoList = databaseXml.xpath('//commonList/video')
     attribs = ['title', 'publishedAt', 'channelTitle', 'description', 'preview'] #, 'width', 'height'
     videosBase = []
-    [videosBase.append({}) for ai in range(0, len(videoList), 1)]
+    num = min(MAX_ELEMENTS_ON_PAGE, len(videoList))  # Number of videos to add to prevent too high resources consumption.
+    [videosBase.append({}) for ai in range(0, num, 1)]
     for keyz in attribs:
         currAttrib = databaseXml.xpath('//commonList/video/@'+keyz)
-        for ai in range(0, len(videoList), 1):
+        for ai in range(0, num, 1):
             videosBase[ai].update(dict.fromkeys([keyz], currAttrib[ai]))
 
     tableTag = ''
@@ -165,8 +213,8 @@ def prepareDataBase(databaseXml):
 def main():
     myDBserver = echoServer()
     myDBserver.updateTask(myDBserver.processRequests, 'serveToDatabase')
+    pageFeedback = myDBserver.events['received']
     while 1:
-        #command = None
         command = myDBserver.pop('fromClient')
         if not command is None:
             # Get all updated list if it's the page loading/updating request; update with clearing and update playlist otherwise.
@@ -189,7 +237,8 @@ def main():
             myQ.task_done()
         else:
             updateDB()  # Just update DB.
-        time.sleep(3)
+        pageFeedback.clear()
+        pageFeedback.wait(timeout=3000)
 
 
 if __name__ == "__main__":

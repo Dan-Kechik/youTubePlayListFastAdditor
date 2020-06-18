@@ -1,6 +1,3 @@
-import base64
-import hashlib
-import re
 import time
 import asyncio
 import threading
@@ -16,12 +13,14 @@ class echoServer:
     tasks = OrderedDict()
     socket_thread = None
     arguments = OrderedDict()
-    server = None
-    address = ('127.0.0.1', 8888)
+    events = OrderedDict()
+    address = None
 
-    def __init__(self):
+    def __init__(self, myHost='127.0.0.1', myPort=8888):
+        self.address = (myHost, myPort)
         # Init queues: command to server; commands to client; requests from client.
         self.queue = {'toServer': Queue(), 'toClient': Queue(), 'fromClient': Queue()}
+        self.events = {'received': threading.Event(), 'gotAnswer': threading.Event(), 'sendToClient': threading.Event(), 'Terminated': threading.Event()}
         self.updateTask(self.handle_echo, 'Echo', getStarted=False)
 
     def updateTask(self, funHandle, name, getStarted=True):
@@ -56,51 +55,46 @@ class echoServer:
                 # Wait for request from client.
                 data = await websocket.recv()
                 print(f"Received {data!r} from {path!r}")
+                e = self.events['received']
+                e.set()
 
                 # Push it to queue and wait for its execution.
                 self.push_and_wait('fromClient', data)
                 print('Awaited backend operations.')
+                e = self.events['gotAnswer']
+                e.set()
 
                 # Read arguments for sending and push forward.
                 message = self.pop('toClient')
                 await websocket.send(message)
                 print(f'Sended to client: {message}')
+                e = self.events['sendToClient']
+                e.set()
 
             except websockets.ConnectionClosed:
                 print(f"Terminated")
-                self.start()
+                e = self.events['Terminated']
+                e.set()
+                self.stop_all()
 
     async def handle_echo(self, websocket, path):
         name = await websocket.recv()
         print(f"< {name}")
+        e = self.events['received']
+        e.set()
 
         greeting = f"Hello {name}!"
 
         await websocket.send(greeting)
         print(f"> {greeting}")
+        e = self.events['sendToClient']
+        e.set()
 
     def start_forever(self):
         name = self.arguments['taskName']
-
-        #myURL = r'ws://' + self.address[0] + f':{self.address[1]}'
-        #async with websockets.connect(myURL) as myServ:
-        #    self.server = myServ
-        #    await self.consume_handler()
         start_server = websockets.serve(self.tasks[name], self.address[0], self.address[1])
         self.serverLoop = asyncio.get_event_loop()
         self.serverLoop.run_until_complete(start_server)
-        #await start_server.ws_server()
-        #await start_server()
-        #asyncio.get_event_loop().run_until_complete(start_server)
-        #asyncio.get_event_loop().run_forever()
-
-        #self.server = await asyncio.start_server(self.tasks[name], self.address[0], self.address[1])
-
-        #addr = self.server.sockets[0].getsockname()
-        #print(f'Serving on {addr}')
-
-        #async with self.server:
-            #await self.server.serve_forever()
 
 
     def loopServer(self):
@@ -111,13 +105,6 @@ class echoServer:
             pass
 
     def stopServer(self):
-        # Close the server
-        if not self.server is None:
-            self.server.close()
-            self.server = None
-            print("The socket server has been halted.")
-        else:
-            print('Server has left off.')
         if not self.serverLoop is None:
             self.serverLoop.stop()
             while self.serverLoop.is_running():
