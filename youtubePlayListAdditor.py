@@ -13,6 +13,8 @@ import warnings
 import google_auth_oauthlib.flow
 import googleapiclient.discovery
 import googleapiclient.errors
+import webbrowser
+import numpy as np
 
 scopes = ["https://www.googleapis.com/auth/youtube.force-ssl"]
 api_service_name = "youtube"
@@ -22,6 +24,7 @@ deployOAuthServ = True  # Server or console authentification
 MAX_ELEMENTS_ON_PAGE = 150
 
 def runAuth():
+    # webbrowser.open_new_tab('')  # For convenience.
     # Get credentials and create an API client
     flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file(
         CLIENT_SECRETS_FILE, scopes)
@@ -47,9 +50,13 @@ def sendVideo(youtube, playListID, videoID, position=0):
             }
         }
     )
-    response = request.execute()
-    print(response)
-    return response
+    try:
+        response = request.execute()
+        print(response)
+        return (response, None)
+    except Exception as e:
+        print(traceback.format_exc())
+        return (None, e)
 
 def getAPIkey():
     with open('APIkey.txt', "rt") as f:
@@ -58,7 +65,11 @@ def getAPIkey():
 
 
 def dateComparison(dateElement):
-    date = dateElement.get('publishedAt').split('.')
+    if type(dateElement) is tuple:
+        currEl = dateElement[1]
+    else:
+        currEl = dateElement
+    date = currEl.get('publishedAt').split('.')
     date = date[0].split('Z')
     return datetime.strptime(date[0], '%Y-%m-%dT%H:%M:%S')
 
@@ -101,9 +112,14 @@ def get_video_list(channelLink):
             thumbnails = item.get('snippet').get('thumbnails')
             if thumbnails == None:
                 continue
-            preview = item.get('snippet').get('thumbnails').get('high').get('url')
-            width = item.get('snippet').get('thumbnails').get('high').get('width')
-            height = item.get('snippet').get('thumbnails').get('high').get('height')
+            try:
+                preview = item.get('snippet').get('thumbnails').get('high').get('url')
+                width = item.get('snippet').get('thumbnails').get('high').get('width')
+                height = item.get('snippet').get('thumbnails').get('high').get('height')
+            except:  # Put in default "no thumblail" image.
+                preview = 'https://i.ytimg.com/img/no_thumbnail.jpg'
+                width = 200
+                height = 100
 
             values = videoId, title, publishedAt, channelTitle, description, preview, width, height
 
@@ -115,7 +131,6 @@ def get_video_list(channelLink):
     except Exception as e:
         print(traceback.format_exc())
         return []
-
 
 def updateDB(delIndex=None):
     # Read old data.
@@ -147,20 +162,41 @@ def updateDB(delIndex=None):
         if not videos[ai].get('videoId') in oldVideos:
             foundVideos.append(videos[ai])
 
-    # Sort by dates.
-    foundVideos.sort(key=dateComparison, reverse=True)
-
-    # Write full list to database.
-    databaseXmlFull = copy.deepcopy(databaseXml)
     videoList = databaseXml.xpath('//commonList')[0]
+    sortVideos(videoList, key=dateComparison, reverse=True)
+    # Get the date of the latest saved video.
+    latestDate = dateComparison(videoList[0])
+    # Sort by dates.
+    sortVideos(foundVideos, key=dateComparison, reverse=True)
+    # foundVideos.sort(key=dateComparison, reverse=True)
+    outdatedID = -1  # len(foundVideos)+1
+    for currID, currVid in enumerate(foundVideos):
+        currTime = dateComparison(currVid)
+        if currTime < latestDate:
+            break
+        outdatedID = currID
+    else:
+        outdatedID = len(foundVideos)-1  # No outdated videos - take the whole list.
+    if outdatedID < 0:
+        foundVideos = []
+    else:
+        foundVideos = foundVideos[:outdatedID+1]
+
+    # Get and sort previous version of  full data base for displaying on page.
+    databaseXmlFull = copy.deepcopy(databaseXml)
+    videoListFullOld = databaseXmlFull.xpath('//commonList')[0]
+    sortVideos(videoListFullOld, key=dateComparison, reverse=False)
+    # Write full list to database.
     if not delIndex is None:
         for ai in range(0, delIndex):
-            videoList.remove(videoList[0])
+            videoList.remove(videoList[-1])
     for viDict in foundVideos:
         videoElement = etree.Element('video')  # New video tag.
         videoList.append(videoElement)
         for keyz in viDict.keys():
             videoElement.set(keyz, viDict.get(keyz).encode('utf-8').decode())
+    # videoList.sort(key=dateComparison, reverse=False)
+    sortVideos(videoList, key=dateComparison, reverse=False)
 
     databaseFile.write(pathToDB, encoding='utf-8', xml_declaration=True)
     return databaseXml, len(foundVideos), databaseXmlFull
@@ -209,6 +245,43 @@ def prepareDataBase(databaseXml):
 
     return tableTag
 
+def getDatesList(videoList):
+    dates = []
+    for vid in videoList:
+        dates.append(dateComparison(vid))
+    return dates
+
+def sortVideos(videoList, key=dateComparison, reverse=False):
+    # Remove erroneous elements
+    nonez = []
+    for ai, vid in enumerate(videoList):
+        if vid.get('publishedAt') is None:
+            nonez.append(ai)
+    for ai in nonez:
+        videoList.remove(videoList[ai])
+    # res = sorted(enumerate(videoList), key=key, reverse=reverse)
+    # idxs = [i[0] for i in res]
+    # replaceList(videoList, idxs)
+    videoList[:] = sorted(videoList, key=key, reverse=reverse)
+    # return idxs
+
+def packToTuple(initialList):
+    outList = []
+    for ai in range(len(initialList)):
+        outList.append(ai, initialList[ai])
+    return outList
+
+def replaceList(myList, ids):
+    usedIdxs = np.array([])
+    for ai in range(len(myList)):
+        if np.any(usedIdxs == ai):
+            continue
+        currIdx = ids[ai]
+        try:
+            myList[ai], myList[currIdx] = myList[currIdx], myList[ai]
+        except:
+            print(ai)
+        usedIdxs = np.hstack([usedIdxs, ai, currIdx])
 
 def main():
     myDBserver = echoServer()
@@ -229,6 +302,7 @@ def main():
                 sendSelected(signedCheckNumber, databaseXmlFull)
             else:
                 (databaseXml, len_foundVideos, databaseXmlFull) = updateDB()
+                print(f'Obtained {len_foundVideos} videos.')
             # Send webpage updaating on load or viewed button click.
             pageText = prepareDataBase(databaseXml)
             myDBserver.push('toClient', pageText)
@@ -236,7 +310,8 @@ def main():
             myQ = myDBserver.queue['fromClient']
             myQ.task_done()
         else:
-            updateDB()  # Just update DB.
+            (databaseXml, len_foundVideos, databaseXmlFull) = updateDB()
+            print(f'Obtained {len_foundVideos} videos.')
         pageFeedback.clear()
         pageFeedback.wait(timeout=3000)
 
